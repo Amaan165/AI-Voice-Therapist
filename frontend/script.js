@@ -109,8 +109,10 @@ async function startConversation() {
             console.log(`🔧 Using evolved prompt for conversation (${evolvedPrompt.length} characters)`);
             conversationConfig.overrides = {
                 agent: {
-                    prompt: evolvedPrompt // ← plain string
+                    prompt: {
+                        prompt: evolvedPrompt 
                     }
+                }
                 };
         } else {
             console.log('🔧 Using default agent prompt for first conversation');

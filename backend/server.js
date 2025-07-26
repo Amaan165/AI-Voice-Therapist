@@ -79,7 +79,11 @@ app.post('/api/conversation-ended', async (req, res) => {
                 agentState.status = 'ready';
                 agentState.description = 'Processing failed, using previous version';
                 agentState.fullPrompt = currentPrompt; // Fallback to current prompt
-            });
+            })
+              .finally(() => {
+                 // ensure front‑end button re‑enables even on exception
+                 if (agentState.status !== 'ready') agentState.status = 'ready';
+              });
 
     } catch (error) {
         console.error('Error starting feedback loop:', error);

@@ -45,7 +45,7 @@ let versionCounter = 1;
 //     const duration = conversationData.metadata?.call_duration_secs || 0;
     
 //     // Add version and basic analytics
-//     newPrompt += `\n\n[Version ${versionCounter + 1}] - Improved based on conversation analysis:
+//     newPrompt += `\n\n[Version ${versionCount] - Improved based on conversation analysis:
 // - Conversation duration: ${duration} seconds
 // - User messages: ${userMessages.length}
 // - Agent messages: ${agentMessages.length}
@@ -60,57 +60,154 @@ let versionCounter = 1;
 //     return newPrompt;
 // }
 
+// async function generateImprovedPrompt(currentPrompt, transcript, convoData) {
+//    // 1. strip version tag
+//    let nextPrompt = currentPrompt.replace(/\[Version \d+.*?]/g, "").trim();
+//    // 2. Build a plain‑text transcript the LLM can grok
+//    const convoText = transcript
+//      .map(m => `${m.role === "user" ? "User" : "Mira"}: ${m.message}`)
+//      .join("\n");
+
+//    // 3. Ask GPT for a concise therapy‑centric summary
+//        let mainTheme      = "unspecified";
+//        let dominantEmotion = "neutral";
+//        let nextStep        = "none";
+//    try {
+//      const res = await openai.chat.completions.create({
+//        model: "gpt-3.5-turbo",
+//        temperature: 0.4,
+//        max_tokens: 120,
+//        messages: [
+//          {
+//            role: "system",
+//            content: [
+//               "You are a therapy‑session summarizer.",
+//               "Extract exactly three items in JSON:",
+//               "{",
+//               '"theme": "<≤7 words>",',
+//               '"emotion": "<one word>",',
+//               '"next_step": "<one sentence action>"',
+//               "}"
+//             ].join(" ")
+//          },
+//          { role: "user", content: convoText }
+//        ]
+//      });
+//     //  summary = res.choices[0].message.content.trim();
+//     const json = JSON.parse(res.choices[0].message.content);
+//       mainTheme       = json.theme;
+//       dominantEmotion = json.emotion;
+//       nextStep        = json.next_step;
+//    } catch (err) {
+//      console.error("⚠️  Summary gen failed:", err.message);
+//    }
+
+//    // 4. Compose new add‑on
+//    versionCounter += 1;
+//    const userQuotes = transcript
+//         .filter(m => m.role === "user")
+//         .slice(0, 2)
+//         .map(m => `• “${m.message.slice(0, 120)}”`)
+//         .join("\n");
+        
+//     nextPrompt +=
+//       `\n\n[Version ${versionCounter}] – Improved from latest session\n` +
+//       `### Session Snapshot\n` +
+//       `**Main theme:** ${mainTheme}\n` +
+//       `**Dominant emotion:** ${dominantEmotion}\n` +
+//       `**Therapeutic next step:** ${nextStep}\n` +
+//       `\n### Key user quotes\n${userQuotes || "• (no quotes captured)"}\n` +
+//       `\n### Mira’s suggested follow‑up\n` +
+//       `Ask how often the user practised the next step and what felt most/least helpful.\n` +
+//       `\n### Metadata (dev‑only)\n` +
+//       `Duration ${convoData.call_duration_secs}s · ` +
+//       `${convoData.user_message_count} user msgs / ` +
+//       `${convoData.agent_message_count} agent msgs · ` +
+//       `ID ${convoData.conversation_id}`;
+
+
+//     if (nextPrompt.length > 7500) {
+//   // drop oldest Dynamic Add‑Ons before appending new one
+//     nextPrompt = nextPrompt.replace(/### Session Snapshot[\s\S]*?(?=\n###|$)/, "")
+//                          .trim();
+// }
+//    return nextPrompt;
+// }
+
 async function generateImprovedPrompt(currentPrompt, transcript, convoData) {
-   // 1. strip version tag
-   let nextPrompt = currentPrompt.replace(/\[Version \d+.*?]/g, "").trim();
-   // 2. Build a plain‑text transcript the LLM can grok
-   const convoText = transcript
-     .map(m => `${m.role === "user" ? "User" : "Mira"}: ${m.message}`)
-     .join("\n");
+  // ─── 1. strip previous version tag ──────────────────────────────────────────
+  let nextPrompt = currentPrompt.replace(/\[Version \d+.*?]/g, '').trim();
 
-   // 3. Ask GPT for a concise therapy‑centric summary
-   let summary = "Summary unavailable.";
-   try {
-     const res = await openai.chat.completions.create({
-       model: "gpt-3.5-turbo",
-       temperature: 0.4,
-       max_tokens: 120,
-       messages: [
-         {
-           role: "system",
-           content:
-             "You are a therapy-session summarizer. Return:\n" +
-             "1. Main theme in ≤7 words\n" +
-             "2. Dominant user emotion in one word\n" +
-             "3. 1 concrete next-step suggestion for CBT/ACT/mindfulness."
-         },
-         { role: "user", content: convoText }
-       ]
-     });
-     summary = res.choices[0].message.content.trim();
-   } catch (err) {
-     console.error("⚠️  Summary gen failed:", err.message);
-   }
+  // ─── 2. Collapse transcript into plain text for GPT 3.5‑turbo ──────────────
+  const convoText = transcript
+    .map(m => `${m.role === 'user' ? 'User' : 'Mira'}: ${m.message}`)
+    .join('\n');
 
-   // 4. Compose new add‑on
-   versionCounter += 1;
-   nextPrompt +=
-     `\n\n[Version ${versionCounter}] - Improved from latest session\n` +
-     `### Session Snapshot\n${summary}\n` +
-     `### Metadata (dev-only)\n` +
-     `Duration ${convoData.call_duration_secs}s · ` +
-     `${convoData.user_message_count} user msgs / ` +
-     `${convoData.agent_message_count} agent msgs · ` +
-     `ID ${convoData.conversation_id}`;
+  // ─── 3. Get theme ♦ emotion ♦ next‑step via LLM (or fallback) ──────────────
+  let theme = 'general wellbeing',
+      emotion = 'neutral',
+      nextStep = 'none';
 
+  try {
+    const res = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      temperature: 0.4,
+      max_tokens: 120,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'You are a brief therapy‑session summariser.',
+            'Return EXACTLY this JSON:',
+            '{ "theme":"<≤7 words>", "emotion":"<one word>", "next_step":"<one sentence action>" }'
+          ].join(' ')
+        },
+        { role: 'user', content: convoText }
+      ]
+    });
+    const parsed = JSON.parse(res.choices[0].message.content);
+    theme    = parsed.theme;
+    emotion  = parsed.emotion;
+    nextStep = parsed.next_step;
+  } catch (e) {
+    console.warn('⚠️  GPT summary failed, using defaults:', e.message);
+  }
 
-    if (nextPrompt.length > 7500) {
-  // drop oldest Dynamic Add‑Ons before appending new one
-    nextPrompt = nextPrompt.replace(/### Session Snapshot[\s\S]*?(?=\n###|$)/, "")
-                         .trim();
+  // ─── 4. Pull two concise user quotes ───────────────────────────────────────
+  const userQuotes = transcript
+    .filter(m => m.role === 'user')
+    .slice(0, 2)
+    .map(m => `• “${m.message.slice(0, 120)}”`)
+    .join('\n') || '• (no quotes captured)';
+
+  // ─── 5. Build the Dynamic Add‑Ons block ────────────────────────────────────
+  versionCounter += 1;
+
+  nextPrompt +=
+    `\n\n[Version ${versionCounter}] – Improved from latest session\n` +
+    `### Session Snapshot\n` +
+    `**Main theme:** ${theme}\n` +
+    `**Dominant emotion:** ${emotion}\n` +
+    `**Therapeutic next step:** ${nextStep}\n` +
+    `\n### Key user quotes\n${userQuotes}\n` +
+    `\n### Mira’s follow‑up cue\n` +
+    `Ask how often the user practised the next step and what felt helpful.\n` +
+    `\n### Metadata (dev‑only)\n` +
+    `Duration ${convoData.call_duration_secs}s · ` +
+    `${convoData.user_message_count} user msgs / ` +
+    `${convoData.agent_message_count} agent msgs · ` +
+    `ID ${convoData.conversation_id}`;
+
+  // ─── 6. Trim if we blow past ~7 500 chars (≈ 5.5 k tokens) ────────────────
+  const MAX = 7500;
+  if (nextPrompt.length > MAX) {
+    nextPrompt = nextPrompt.replace(
+      /### Session Snapshot[\s\S]*?(?=\n###|$)/, ''
+    ).trim();
+  }
+  return nextPrompt;
 }
-   return nextPrompt;
-}
+
 
 /**
  * Main feedback loop processing function
@@ -150,28 +247,28 @@ async function processConversationFeedback(currentPrompt = null) {
         // const improvedPrompt = await generateImprovedPrompt(currentPrompt, transcript, conversationDetails);
 
         const userMsgs  = transcript.filter(m => m.role === "user").length;
-        const agentMsgs = transcript.filter(m => m.role === "assistant").length;
+        const agentMsgs = transcript.filter(m => m.role === "agent").length;
 
-          const improvedPrompt = await generateImprovedPrompt(
-            currentPrompt,
-            transcript,
-            {
-              call_duration_secs: conversation.call_duration_secs,
-              user_message_count: userMsgs,
-              agent_message_count: agentMsgs,
-              conversation_id:    conversation.conversation_id
-            }
-          );
+        const improvedPrompt = await generateImprovedPrompt(
+        currentPrompt,
+        transcript,
+        {
+            call_duration_secs : conversationDetails.metadata?.call_duration_secs || 0,
+            user_message_count: userMsgs,
+            agent_message_count: agentMsgs,
+            conversation_id:    conversation.conversation_id
+        }
+        );
         
-        // Step 6: Increment version and return result
-        versionCounter++;
+        // Step 6: Return the new prompt info (versionCounter was already bumped inside generateImprovedPrompt)
         const result = {
-            version: `${versionCounter}.0`,
-            description: `Enhanced based on conversation analysis`,
-            conversationAnalyzed: conversation.conversation_id,
-            timestamp: new Date().toISOString(),
-            fullPrompt: improvedPrompt  // Return the complete new prompt
+        version: `v${versionCounter}`,
+        description: "Enhanced based on conversation analysis",
+        conversationAnalyzed: conversation.conversation_id,
+        timestamp: new Date().toISOString(),
+        fullPrompt: improvedPrompt
         };
+    
         
         console.log('✅ Feedback loop completed successfully');
         console.log(`📞 Analyzed conversation: ${conversation.conversation_id}`);
