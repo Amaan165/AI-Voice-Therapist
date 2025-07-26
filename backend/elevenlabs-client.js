@@ -172,7 +172,7 @@ async function getCurrentAgentInfo() {
  * @param {number} delayMs - Delay between attempts in milliseconds
  * @returns {Promise<Object|null>} The conversation data or null if not found
  */
-async function waitForLatestConversation(maxAttempts = 10, delayMs = 2000) {
+async function waitForLatestConversation(maxAttempts = 15, delayMs = 3000) {
     console.log(`⏳ Waiting for conversation to be available...`);
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -220,14 +220,15 @@ function isConversationReady(conversation) {
 
     // Check if it has reasonable duration (avoid 0-second calls)
     const duration = conversation.call_duration_secs || 0;
-    if (duration < 2) {
+    if (duration < 1) {
         console.log(`❌ Conversation too short (${duration}s), likely incomplete`);
         return false;
     }
 
     // Check message count (should have at least some interaction)
     const messageCount = conversation.message_count || 0;
-    if (messageCount < 2) {
+    // 1 agent line + 1 user line is enough for a prototype
+    if (messageCount < 1) {
         console.log(`❌ Too few messages (${messageCount}), likely incomplete`);
         return false;
     }
