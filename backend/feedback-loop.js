@@ -111,7 +111,7 @@ let versionCounter = 1;
 //         .join("\n");
         
 //     nextPrompt +=
-//       `\n\n[Version ${versionCounter}] – Improved from latest session\n` +
+//       `\n\n[Version ${versionCounter}]   Improved from latest session\n` +
 //       `### Session Snapshot\n` +
 //       `**Main theme:** ${mainTheme}\n` +
 //       `**Dominant emotion:** ${dominantEmotion}\n` +
@@ -119,7 +119,7 @@ let versionCounter = 1;
 //       `\n### Key user quotes\n${userQuotes || "• (no quotes captured)"}\n` +
 //       `\n### Mira’s suggested follow‑up\n` +
 //       `Ask how often the user practised the next step and what felt most/least helpful.\n` +
-//       `\n### Metadata (dev‑only)\n` +
+//       `\n### Metadata (dev‑only)\n` +
 //       `Duration ${convoData.call_duration_secs}s · ` +
 //       `${convoData.user_message_count} user msgs / ` +
 //       `${convoData.agent_message_count} agent msgs · ` +
@@ -138,7 +138,7 @@ async function generateImprovedPrompt(currentPrompt, transcript, convoData) {
   // ─── 1. strip previous version tag ──────────────────────────────────────────
   let nextPrompt = currentPrompt.replace(/\[Version \d+.*?]/g, '').trim();
 
-  // ─── 2. Collapse transcript into plain text for GPT 3.5‑turbo ──────────────
+  // ─── 2. Collapse transcript into plain text for GPT 3.5‑turbo ──────────────
   const convoText = transcript
     .map(m => `${m.role === 'user' ? 'User' : 'Mira'}: ${m.message}`)
     .join('\n');
@@ -157,9 +157,9 @@ async function generateImprovedPrompt(currentPrompt, transcript, convoData) {
         {
           role: 'system',
           content: [
-            'You are a brief therapy‑session summariser.',
-            'Return EXACTLY this JSON:',
-            '{ "theme":"<≤7 words>", "emotion":"<one word>", "next_step":"<one sentence action>" }'
+            'Return ONE line of valid JSON with exactly these keys:',
+            '{"theme":"<≤7 words>","emotion":"<one word>","next_step":"<1 sentence>"}',
+            'No markdown, no extra keys, keep it on one line.'
           ].join(' ')
         },
         { role: 'user', content: convoText }
@@ -173,33 +173,46 @@ async function generateImprovedPrompt(currentPrompt, transcript, convoData) {
     console.warn('⚠️  GPT summary failed, using defaults:', e.message);
   }
 
-  // ─── 4. Pull two concise user quotes ───────────────────────────────────────
-  const userQuotes = transcript
-    .filter(m => m.role === 'user')
-    .slice(0, 2)
-    .map(m => `• “${m.message.slice(0, 120)}”`)
-    .join('\n') || '• (no quotes captured)';
+  // ─── 4. Pull two *meaningful* user quotes ──────────────────────────────────
+  function pickTopQuotes(messages, n = 2) {
+   // Rank by length ×  sentiment weight (quick heuristic)
+   return messages
+     .map(m => m.message.trim())
+     .filter(t => t.length > 12)                // skip “ok” / “yeah”
+     .sort((a, b) => b.length - a.length)       // longest ≈ richer content
+     .slice(0, n)
+     .map((q, idx) => {
+       // Capitalise first letter, strip trailing punctuation duplication
+       q = q.charAt(0).toUpperCase() + q.slice(1).replace(/\.$/, '');
+       return (idx === 0 ? "**Top concern:** " : "**Second:** ") + `“${q}.”`;
+     })
+     .join('\n');
+ }
 
-  // ─── 5. Build the Dynamic Add‑Ons block ────────────────────────────────────
+ const userQuotes = pickTopQuotes(
+   transcript.filter(m => m.role === 'user')
+ ) || '**No salient quotes captured.**';
+
+  // ─── 5. Build the Dynamic Add‑Ons block ────────────────────────────────────
   versionCounter += 1;
 
   nextPrompt +=
-    `\n\n[Version ${versionCounter}] – Improved from latest session\n` +
+    `\n\n[Version ${versionCounter}] - Improved from latest session\n` +
     `### Session Snapshot\n` +
-    `**Main theme:** ${theme}\n` +
-    `**Dominant emotion:** ${emotion}\n` +
-    `**Therapeutic next step:** ${nextStep}\n` +
-    `\n### Key user quotes\n${userQuotes}\n` +
-    `\n### Mira’s follow‑up cue\n` +
+    `-> Main theme: ${theme}\n` +
+    `-> Dominant emotion: ${emotion}\n` +
+    `-> Therapeutic next step: ${nextStep}\n` +
+    `\n=> Key user quotes\n${userQuotes}\n` +
+    `\n=> Mira’s follow‑up cue\n` +
     `Ask how often the user practised the next step and what felt helpful.\n` +
-    `\n### Metadata (dev‑only)\n` +
-    `Duration ${convoData.call_duration_secs}s · ` +
-    `${convoData.user_message_count} user msgs / ` +
-    `${convoData.agent_message_count} agent msgs · ` +
-    `ID ${convoData.conversation_id}`;
+    `\n=> Metadata (dev‑only)\n` +
+    `Duration ${convoData.call_duration_secs}s · ` +
+    `${convoData.user_message_count} user msgs / ` +
+    `${convoData.agent_message_count} agent msgs · ` +
+    `ID ${convoData.conversation_id}`;
 
-  // ─── 6. Trim if we blow past ~7 500 chars (≈ 5.5 k tokens) ────────────────
-  const MAX = 7500;
+  // ─── 6. Trim if we blow past ~7 500 chars (≈ 5.5 k tokens) ────────────────
+  const MAX = 10000;
   if (nextPrompt.length > MAX) {
     nextPrompt = nextPrompt.replace(
       /### Session Snapshot[\s\S]*?(?=\n###|$)/, ''

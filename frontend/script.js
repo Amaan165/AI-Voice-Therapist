@@ -185,7 +185,7 @@ async function pollForAgentReady() {
             if (data.status === 'ready') {
                 // Agent is ready with new version and evolved prompt
                 completedConversations++;
-                conversationCount.textContent = `Conversations completed: ${completedConversations}`;
+                conversationCount.textContent = ` ${completedConversations}`;
                 versionDetails.textContent = `Version ${data.version} - ${data.description}`;
                 
                 // Store the evolved prompt for next conversation
@@ -273,3 +273,4 @@ window.debugAgent = {
         };
     }
 };
+

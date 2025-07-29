@@ -69,7 +69,7 @@ app.post('/api/conversation-ended', async (req, res) => {
                 agentState.description = result.description;
                 agentState.conversationsCompleted++;
                 agentState.fullPrompt = result.fullPrompt; // Store the complete evolved prompt
-                
+
                 console.log(`✅ Agent updated to version ${result.version}`);
                 console.log(`📝 New prompt ready (${result.fullPrompt.length} characters)`);
             })
